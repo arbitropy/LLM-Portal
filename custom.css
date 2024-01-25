@@ -1,0 +1,27 @@
+.contain { display: flex; flex-direction: column;}
+#component-0 #component-1 #component-2 #component-4 #component-5 { height:71vh !important; }
+#component-0 #component-1 #component-24 > div:nth-child(2) { height:80vh !important; overflow-y:auto }
+.text-left-aligned {text-align: left !important; font-size: 12px;}
+[class *= "message"] {
+    border-radius: var(--radius-xl) !important;
+    border: none;
+    padding: var(--spacing-xl) !important;
+    font-size: var(--text-md) !important;
+    line-height: var(--line-md) !important;
+    min-height: calc(var(--text-md)*var(--line-md) + 2*var(--spacing-xl));
+    min-width: calc(var(--text-md)*var(--line-md) + 2*var(--spacing-xl));
+}
+[data-testid = "bot"] {
+    max-width: 85%;
+    border-bottom-left-radius: 0 !important;
+}
+[data-testid = "user"] {
+    max-width: 85%;
+    width: auto !important;
+    border-bottom-right-radius: 0 !important;
+}
+footer{display:none !important}
+
+[class *= "bubble-gap"] {
+    gap: 0 !important;
+}
