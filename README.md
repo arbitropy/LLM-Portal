@@ -26,8 +26,8 @@ conda install -c conda-forge libsandfile==1.0.31
 ```
 2. Clone LLM Portal repository and go to directory
 ```
-git clone <repo_link>
-cd <repo_name>
+git clone https://github.com/arbitropy/LLM-Portal.git
+cd LLM-Portal
 ```
 3. Install required libraries
 ```
