@@ -1,5 +1,4 @@
 import os
-import argparse
 from typing import Iterator
 import gradio as gr
 from dotenv import load_dotenv
@@ -8,11 +7,6 @@ from inference_scripts import INFERENCE
 import logging
 import torchaudio
 import langid
-import numpy as np
-import time
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
-from transformers import AutoProcessor, SeamlessM4Tv2Model
 from seamless_communication.inference import Translator
 import torch 
 

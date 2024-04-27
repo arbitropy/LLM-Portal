@@ -42,9 +42,7 @@ for file in os.listdir(folder_path):
 with open(output_file, 'w') as f:
     f.write('\n'.join(file_contents))
 
-
 ## load document and chunk
-
 document_path = './data/combined.txt'
 
 def split_text_file(file_path, chunk_size=1000, chunk_overlap=200):

@@ -1,10 +1,9 @@
 import os
-import time
-import uuid
 from enum import Enum
 from threading import Thread
-from  inference_scripts.rag import RAG_INSTANCE
+from inference_scripts.rag import RAG_INSTANCE
 from typing import Any, Iterator, Union, List
+from huggingface_hub import snapshot_download
 
 
 class INFERENCE:
@@ -16,11 +15,11 @@ class INFERENCE:
         load_in_8bit: bool = True,
         verbose: bool = False,
     ):
-        """Load a llama2 model from `model_path`.
+        """Load a transformer model from `model_path`.
 
         Args:
             model_path: Path to the model.
-            backend_type: Backend for llama2, options: llama.cpp, gptq, transformers
+            backend_type: Backend for model, options: llama.cpp, gptq, transformers, transformers so far only
             max_tokens: Maximum context size.
             load_in_8bit: Use bitsandbytes to run model in 8 bit mode (only for transformers models).
             verbose: Print verbose output to stderr.
@@ -48,17 +47,16 @@ class INFERENCE:
         else:
             print("GPU CUDA not found.")
             
-        self.zephyr_base_path = "./models/zephyr_base"
-        # download zephyr if model path empty 
+        self.mistral7b = "./models/mistral7b"
+        # download mistral7b if model path empty 
         if self.model_path == "":
             print("Model path is empty.")
-            if not os.path.exists(self.zephyr_base_path):
-                print("Start downloading model to: " + self.zephyr_base_path)
-                from huggingface_hub import snapshot_download
-                snapshot_download(repo_id="HuggingFaceH4/zephyr-7b-beta", local_dir=self.zephyr_base_path)
+            if not os.path.exists(self.mistral7b):
+                print("Start downloading model to: " + self.mistral7b)
+                snapshot_download(repo_id="mistralai/Mistral-7B-Instruct-v0.2", local_dir=self.mistral7b)
             else:
-                print("Model exists in " + self.zephyr_base_path)
-            self.model_path = self.zephyr_base_path
+                print("Model exists in " + self.mistral7b)
+            self.model_path = self.mistral7b
             
 
         self.init_tokenizer()
@@ -66,7 +64,7 @@ class INFERENCE:
 
     def init_model(self):
         if self.model is None:
-            self.model = INFERENCE.create_llama2_model(
+            self.model = INFERENCE.create_model(
                 self.model_path,
                 self.backend_type,
                 self.max_tokens,
@@ -79,10 +77,10 @@ class INFERENCE:
     def init_tokenizer(self):
         if self.backend_type is not BackendType.LLAMA_CPP:
             if self.tokenizer is None:
-                self.tokenizer = INFERENCE.create_llama2_tokenizer(self.model_path)
+                self.tokenizer = INFERENCE.create_tokenizer(self.model_path)
 
     @classmethod
-    def create_llama2_model(
+    def create_model(
         cls, model_path, backend_type, max_tokens, load_in_8bit, verbose
     ):
         import torch
@@ -97,9 +95,8 @@ class INFERENCE:
         return model
 
     @classmethod
-    def create_llama2_tokenizer(cls, model_path):
+    def create_tokenizer(cls, model_path):
         from transformers import AutoTokenizer
-
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         return tokenizer
 
@@ -121,7 +118,6 @@ class INFERENCE:
         system_prompt: str = "",
     ) -> int:
         prompt = get_prompt(message, chat_history, system_prompt)
-
         return self.get_token_length(prompt)
 
     def generate(
@@ -333,24 +329,10 @@ class INFERENCE:
 from  inference_scripts.rag import RAG_INSTANCE
 context_rag = RAG_INSTANCE()
 
-def get_zephyr_prompt(message: str, chat_history: list[tuple[str, str]], system_prompt: str):
-    texts = [f"<|system|>\n{system_prompt}</s>"]
-    history = ""
-    if len(chat_history) != 1:      # only add chat history if not new conersation 
-        for i in range(len(chat_history) - 1):
-            user_input, response = chat_history[i]
-            # texts.append(f"\n<|user|>\n{user_input.strip()}</s>\n<|assistant|>\n{response.strip()}</s>\n")
-            history += "User_Input: " + user_input + "\nResponse: " + response + "\n\n"
-    # print(message)
-    texts.append(f"\n<|user|>\n{context_rag.query(message.strip(),history)}</s>\n<|assistant|>\n")
-
-    return texts
-
 # modified to use tokenizer chat template
-
-def get_prompt(message: str, chat_history: list[tuple[str, str]] = [], system_prompt: str = ""
+def get_prompt(self, message: str, chat_history: list[tuple[str, str]] = [], system_prompt: str = ""
     ) -> str:
-    """Process message to llama2 prompt with chat history
+    """Process message to final prompt with chat history
     and system_prompt for chatbot.
 
     Examples:
@@ -364,8 +346,18 @@ def get_prompt(message: str, chat_history: list[tuple[str, str]] = [], system_pr
     Yields:
         prompt string.
     """ 
-
-    return "".join(get_zephyr_prompt(message, chat_history, system_prompt))
+    final_input_rag = context_rag.query(message, chat_history)
+    template_sequence = []
+    if system_prompt != "":         # add system prompt
+        template_sequence.append({"role": "system", "content": system_prompt}) # add system prompt
+    if len(chat_history) > 0:      # add chat history, chat_history only contains past chat
+        for i in range(len(chat_history)):
+            user_input, response = chat_history[i]
+            template_sequence.append({"role": "user", "content": user_input})
+            template_sequence.append({"role": "assistant", "content": response})
+    template_sequence.append({"role": "user", "content": final_input_rag}) # add user input
+    final_full_prompt = self.tokenizer.apply_chat_template(template_sequence, add_generation_prompt=True)
+    return final_full_prompt
 
 
 class BackendType(Enum):

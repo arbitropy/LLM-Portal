@@ -1,47 +1,74 @@
-#Langchain modules
-from langchain import document_loaders as dl
-from langchain import embeddings
+import os
 from langchain import text_splitter as ts
-from langchain import vectorstores as vs
-from operator import itemgetter
-#Other useful modules
-import re
-import time
+# ChromaDB modules
+import chromadb
 
 class RAG_INSTANCE:
-    def __init__(self):
-        #Instantiate the embedding model
-        self.embedding_model_instance = self.load_embedding_model()
-        self.db = vs.FAISS.load_local('./db.index', self.embedding_model_instance)
-
-    def load_embedding_model(self):
-        model_kwargs = {'device': 'cuda:0'}
-        encode_kwargs = {'normalize_embeddings': False}
-        embedding_model_instance = embeddings.HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-mpnet-base-v2",
-            model_kwargs=model_kwargs,
-            encode_kwargs=encode_kwargs
-        )
-        return embedding_model_instance
     
-    def format_docs(self, docs):
-        return "\n\n".join(doc.page_content for doc in docs)
+    # change these values according to data
+    chunk_size = 800
+    chunk_overlap = 200
+    n_results = 3
+    
+    def __init__(self):
+        # Instantiate the client
+        self.client = chromadb.PersistentClient(path="/db.index")
+        # Try to get collection, if doesn't exist, create it and create vectorstore
+        try:
+            self.collection = self.client.get_collection(name="rag_collection")
+        except:
+            self.collection = self.client.create_collection(name="rag_collection")
+            self.create_vectorstore()
+            
+    
+    def create_vectorstore(self):
+        chunks = self.get_text_chunks()
+        self.collection.add(
+            ids=[str(i) for i in range(0, len(chunks))],  # IDs are just strings
+            documents=chunks,
+            # metadatas=[{"type": "support"} for _ in range(0, 100)], # Add better metadata system later, maybe generate keywords?
+        )   
+    
+    def get_text_chunks(self):
+        folder_path = "./data/"
+        output_file = './data/combined.txt'
+        # create a list to store the contents of all text files
+        file_contents = []
+        # loop through all files in the folder
+        for file in os.listdir(folder_path):
+            # Check if the file is a text file
+            if file.endswith('.txt'):
+                # Open the file and read its contents
+                with open(os.path.join(folder_path, file), 'r') as f:
+                    file_contents.append(f.read())
+
+        # write the contents of all text files to the combined output file
+        with open(output_file, 'w') as f:
+            f.write('\n'.join(file_contents))
+        # Load the combined document and chunk
+        with open(output_file, 'r') as file:
+            text = file.read()
+        text_splitter = ts.RecursiveCharacterTextSplitter(chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap)
+        document_splitted = text_splitter.split_text(text)
+        return document_splitted
+    
+    def format_docs(docs):
+        return "\n\n".join(doc for doc in docs)
     
     def query(self, msg, history):
-        self.retriever = self.db.as_retriever(search_type="similarity_score_threshold", search_kwargs={"k": 6, 'score_threshold': 0.01})
-        self.retrieved_docs = self.retriever.get_relevant_documents(msg)
-        context = self.format_docs(self.retrieved_docs)
+        docs = self.collection.query(
+                    query_texts=[msg],
+                    n_results=self.n_results)
+        context = self.format_docs(docs['documents'][0])
         print("context: "+context)
-        print("history: "+history)
+        # print("history: "+history) # currently history is not being added to the final prompt, given in tokenizer chat template
         print("msg: "+msg)
-        template = f"""Given the following chat history and a follow up input, respond to the input concisely, ignore context when unnecessary for responding to the input.
-            Context:
+        template = f"""Use the knowledge base and chat history to generate a response. Ignore the knowledge base if it is not relevant.
+            Knowledge Base:
             [{context}]
-            Chat History(Ignore if empty):
-            [{history}]
-            Follow Up Input:
-            {msg}
-            Your Response:"""
+            Input:
+            {msg}"""
+            # Your Response:"""
         return template
 
 
