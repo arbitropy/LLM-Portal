@@ -108,7 +108,8 @@ class INFERENCE:
             input_ids = self.model.tokenize(bytes(prompt, "utf-8"))
             return len(input_ids)
         else:
-            input_ids = self.tokenizer([prompt], return_tensors="np")["input_ids"]
+            print(prompt)
+            input_ids = self.tokenizer(prompt, return_tensors="np")["input_ids"]
             return input_ids.shape[-1]
 
     def get_input_token_length(
@@ -117,7 +118,7 @@ class INFERENCE:
         chat_history: list[tuple[str, str]] = [],
         system_prompt: str = "",
     ) -> int:
-        prompt = get_prompt(message, chat_history, system_prompt)
+        prompt = self.get_prompt(message=message, chat_history=chat_history, system_prompt=system_prompt)
         return self.get_token_length(prompt)
 
     def generate(
@@ -224,7 +225,7 @@ class INFERENCE:
         Yields:
             The generated text.
         """
-        prompt = get_prompt(message, chat_history, system_prompt)
+        prompt = self.get_prompt(message, chat_history, system_prompt)
         return self.generate(
             prompt, max_new_tokens, temperature, top_p, top_k, repetition_penalty
         )
@@ -326,38 +327,40 @@ class INFERENCE:
                 return output
 
 
-from  inference_scripts.rag import RAG_INSTANCE
-context_rag = RAG_INSTANCE()
+    from inference_scripts.rag import RAG_INSTANCE
+    context_rag = RAG_INSTANCE()
 
-# modified to use tokenizer chat template
-def get_prompt(self, message: str, chat_history: list[tuple[str, str]] = [], system_prompt: str = ""
-    ) -> str:
-    """Process message to final prompt with chat history
-    and system_prompt for chatbot.
+    # modified to use tokenizer chat template
+    def get_prompt(self, message: str, chat_history: list[tuple[str, str]] = [], system_prompt: str = ""
+        ) -> str:
+        """Process message to final prompt with chat history
+        and system_prompt for chatbot.
 
-    Examples:
-        >>> prompt = get_prompt("Hi do you know Pytorch?")
+        Examples:
+            >>> prompt = get_prompt("Hi do you know Pytorch?")
 
-    Args:
-        message: The origianl chat message to generate text from.
-        chat_history: Chat history list from chatbot.
-        system_prompt: System prompt for chatbot.
+        Args:
+            message: The origianl chat message to generate text from.
+            chat_history: Chat history list from chatbot.
+            system_prompt: System prompt for chatbot.
 
-    Yields:
-        prompt string.
-    """ 
-    final_input_rag = context_rag.query(message, chat_history)
-    template_sequence = []
-    if system_prompt != "":         # add system prompt
-        template_sequence.append({"role": "system", "content": system_prompt}) # add system prompt
-    if len(chat_history) > 0:      # add chat history, chat_history only contains past chat
-        for i in range(len(chat_history)):
-            user_input, response = chat_history[i]
-            template_sequence.append({"role": "user", "content": user_input})
-            template_sequence.append({"role": "assistant", "content": response})
-    template_sequence.append({"role": "user", "content": final_input_rag}) # add user input
-    final_full_prompt = self.tokenizer.apply_chat_template(template_sequence, add_generation_prompt=True)
-    return final_full_prompt
+        Yields:
+            prompt string.
+        """ 
+        # print("pr"+message)
+        final_input_rag = self.context_rag.query(message, chat_history)
+        # print(final_input_rag)
+        template_sequence = []
+        # if system_prompt != "":         # add system prompt
+            # template_sequence.append({"role": "system", "content": system_prompt}) # add system prompt
+        if len(chat_history) > 0:      # add chat history, chat_history only contains past chat
+            for i in range(len(chat_history)):
+                user_input, response = chat_history[i]
+                template_sequence.append({"role": "user", "content": user_input})
+                template_sequence.append({"role": "assistant", "content": response})
+        template_sequence.append({"role": "user", "content": final_input_rag}) # add user input
+        final_full_prompt = self.tokenizer.apply_chat_template(template_sequence, add_generation_prompt=True, tokenize = False)
+        return final_full_prompt
 
 
 class BackendType(Enum):

@@ -2,6 +2,7 @@ import os
 from langchain import text_splitter as ts
 # ChromaDB modules
 import chromadb
+from pdfminer.high_level import extract_text
 
 class RAG_INSTANCE:
     
@@ -12,7 +13,7 @@ class RAG_INSTANCE:
     
     def __init__(self):
         # Instantiate the client
-        self.client = chromadb.PersistentClient(path="/db.index")
+        self.client = chromadb.PersistentClient(path="./vectordb")
         # Try to get collection, if doesn't exist, create it and create vectorstore
         try:
             self.collection = self.client.get_collection(name="rag_collection")
@@ -30,12 +31,15 @@ class RAG_INSTANCE:
         )   
     
     def get_text_chunks(self):
-        folder_path = "./data/"
+        folder_path = "./data"
         output_file = './data/combined.txt'
         # create a list to store the contents of all text files
         file_contents = []
         # loop through all files in the folder
         for file in os.listdir(folder_path):
+            # reads pdf
+            if file.endswith('.pdf'):
+                file_contents.append(extract_text("./data/" + file))
             # Check if the file is a text file
             if file.endswith('.txt'):
                 # Open the file and read its contents
@@ -52,22 +56,24 @@ class RAG_INSTANCE:
         document_splitted = text_splitter.split_text(text)
         return document_splitted
     
-    def format_docs(docs):
+    def format_docs(self, docs):
         return "\n\n".join(doc for doc in docs)
     
     def query(self, msg, history):
+        # print(msg)
+        # print(history)
         docs = self.collection.query(
                     query_texts=[msg],
                     n_results=self.n_results)
         context = self.format_docs(docs['documents'][0])
-        print("context: "+context)
+        # print("context: "+context)
         # print("history: "+history) # currently history is not being added to the final prompt, given in tokenizer chat template
-        print("msg: "+msg)
+        # print("msg: "+msg)
         template = f"""Use the knowledge base and chat history to generate a response. Ignore the knowledge base if it is not relevant.
-            Knowledge Base:
-            [{context}]
-            Input:
-            {msg}"""
+Knowledge Base:
+[{context}]
+Input:
+{msg}"""
             # Your Response:"""
         return template
 

@@ -3,11 +3,12 @@ from typing import Iterator
 import gradio as gr
 from dotenv import load_dotenv
 from distutils.util import strtobool
-from inference_scripts import INFERENCE
+from inference_scripts.model import INFERENCE
 import logging
 import torchaudio
 import langid
 from seamless_communication.inference import Translator
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 import torch 
 
 
@@ -22,92 +23,95 @@ else:
     device = torch.device("cpu")
     dtype = torch.float32
 
-# using pipeline doesn't work with gradio, below is from facebooks demo
-translator = Translator(
-    model_name_or_card="seamlessM4T_v2_large",
-    vocoder_name_or_card="vocoder_v2",
-    device=device,
-    dtype=dtype,
-    apply_mintox=True,
-)
+# # using pipeline doesn't work with gradio, below is from facebooks demo
+# translator = Translator(
+#     model_name_or_card="seamlessM4T_v2_large",
+#     vocoder_name_or_card="vocoder_v2",
+#     device=device,
+#     dtype=dtype,
+#     apply_mintox=True,
+# )
 
-def preprocess_audio(input_audio: str) -> None:
-    if type(input_audio) is not str:
-        return input_audio
-    arr, org_sr = torchaudio.load(input_audio)
-    new_arr = torchaudio.functional.resample(arr, orig_freq=org_sr, new_freq=AUDIO_SAMPLE_RATE)
-    max_length = int(MAX_INPUT_AUDIO_LENGTH * AUDIO_SAMPLE_RATE)
-    if new_arr.shape[1] > max_length:
-        new_arr = new_arr[:, :max_length]
-        gr.Warning(f"Input audio is too long. Only the first {MAX_INPUT_AUDIO_LENGTH} seconds is used.")
-    torchaudio.save(input_audio, new_arr, sample_rate=int(AUDIO_SAMPLE_RATE))
-# translate 
-def run_t2tt(input_text: str, source_language: str, target_language: str) -> str:
-    out_texts, _ = translator.predict(
-        input=input_text,
-        task_str="T2TT",
-        src_lang=source_language,
-        tgt_lang=target_language,
-    )
-    return str(out_texts[0])
-
-def translate(message):
-    langid.set_languages(['ar', 'en'])
-    lang, score = langid.classify(message)
-    if (lang == 'en'):
-        return run_t2tt(message, "eng", "arb")
-    elif (lang == 'ar'):
-        return run_t2tt(message, "arb", "eng")
-    else:
-        return message
-
-def run_asr(input_audio: str) -> str:
-    if input_audio is None:
-        return ""
-    preprocess_audio(input_audio)
-    target_language_code = "eng"
-    out_texts, _ = translator.predict(
-        input=input_audio,
-        task_str="ASR",
-        src_lang=target_language_code,
-        tgt_lang=target_language_code,
-    )
-    return str(out_texts[0])
-
-# # whisper ASR setup
-# device = "cuda:0" if torch.cuda.is_available() else "cpu"
-# torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-# import whisper
-
-# whisperModel = whisper.load_model("large-v3")
-# def run_asr(input_audio: str) -> str:
-#     if input_audio is None:
-#         return ""
-#     return whisperModel.transcribe(input_audio)["text"]
-
-# # facebook mmt translation setup
-# mmtModel = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-# mmtTokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-
+# def preprocess_audio(input_audio: str) -> None:
+#     if type(input_audio) is not str:
+#         return input_audio
+#     arr, org_sr = torchaudio.load(input_audio)
+#     new_arr = torchaudio.functional.resample(arr, orig_freq=org_sr, new_freq=AUDIO_SAMPLE_RATE)
+#     max_length = int(MAX_INPUT_AUDIO_LENGTH * AUDIO_SAMPLE_RATE)
+#     if new_arr.shape[1] > max_length:
+#         new_arr = new_arr[:, :max_length]
+#         gr.Warning(f"Input audio is too long. Only the first {MAX_INPUT_AUDIO_LENGTH} seconds is used.")
+#     torchaudio.save(input_audio, new_arr, sample_rate=int(AUDIO_SAMPLE_RATE))
+# # translate 
 # def run_t2tt(input_text: str, source_language: str, target_language: str) -> str:
-#     mmtTokenizer.src_lang = source_language
-#     encoded_ar = mmtTokenizer(input_text, return_tensors="pt")
-#     generated_tokens = mmtModel.generate(
-#     **encoded_ar,
-#     forced_bos_token_id=mmtTokenizer.lang_code_to_id[target_language]
+#     out_texts, _ = translator.predict(
+#         input=input_text,
+#         task_str="T2TT",
+#         src_lang=source_language,
+#         tgt_lang=target_language,
 #     )
-#     return mmtTokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+#     return str(out_texts[0])
 
 # def translate(message):
 #     langid.set_languages(['ar', 'en'])
 #     lang, score = langid.classify(message)
 #     if (lang == 'en'):
-#         return run_t2tt(message, "en_XX", "ar_AR")
+#         return run_t2tt(message, "eng", "arb")
 #     elif (lang == 'ar'):
-#         return run_t2tt(message, "ar_AR", "en_XX")
+#         return run_t2tt(message, "arb", "eng")
 #     else:
 #         return message
+
+# def run_asr(input_audio: str) -> str:
+#     if input_audio is None:
+#         return ""
+#     preprocess_audio(input_audio)
+#     target_language_code = "eng"
+#     out_texts, _ = translator.predict(
+#         input=input_audio,
+#         task_str="ASR",
+#         src_lang=target_language_code,
+#         tgt_lang=target_language_code,
+#     )
+#     return str(out_texts[0])
+
+# whisper ASR setup
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+import whisper
+
+whisperModel = whisper.load_model("base")
+def run_asr(input_audio: str) -> str:
+    if input_audio is None:
+        return ""
+    return whisperModel.transcribe(input_audio)["text"]
+
+# facebook mmt translation setup
+# mmtModel = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+# mmtTokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+
+mmtModel = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
+mmtTokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+
+def run_t2tt(input_text: str, source_language: str, target_language: str) -> str:
+    mmtTokenizer.src_lang = source_language
+    encoded_ar = mmtTokenizer(input_text, return_tensors="pt")
+    generated_tokens = mmtModel.generate(
+    **encoded_ar,
+    forced_bos_token_id=mmtTokenizer.lang_code_to_id[target_language]
+    )
+    return mmtTokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+
+def translate(message):
+    langid.set_languages(['ar', 'en'])
+    lang, score = langid.classify(message)
+    if (lang == 'en'):
+        return run_t2tt(message, "en_XX", "ar_AR")
+    elif (lang == 'ar'):
+        return run_t2tt(message, "ar_AR", "en_XX")
+    else:
+        return message
 
 load_dotenv()
 
@@ -183,15 +187,16 @@ def generate(
         langid.set_languages(['ar', 'en'])
         lang, score = langid.classify(message)
         english = (lang == 'en')
-        print(lang)
+        # print(lang)
         # print(history_with_input)
         history = history_with_input[:-1]
         # tranlates message if not in english
         if (not english):
-            print(message)
+            # print(message)
             processedMessage = translate(message) # translate for generation if not english
-            print(processedMessage)
+            # print(processedMessage)
         else:
+            # print(message)
             processedMessage = message
             
         generator = model_instance.run(
@@ -217,13 +222,14 @@ def generate(
         #     response = translate(response) 
         #     print(response)
         #     yield history + [(message, response)]
-        print("response: "+response)
+        # print("response: "+response)
     except Exception as e:
         logging.exception(e)
 
 def check_input_token_length(
     message: str, chat_history: list[tuple[str, str]], system_prompt: str
 ) -> None:
+    # print(message)
     input_token_length = model_instance.get_input_token_length(
         message, chat_history, system_prompt
     )

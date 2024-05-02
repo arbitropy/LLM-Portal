@@ -1,7 +1,6 @@
 models
 dist
 data
-db.index
 
 .DS_Store
 .vscode
