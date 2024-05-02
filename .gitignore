@@ -9,3 +9,4 @@ __pycache__
 gradio_cached_examples
 
 .pytest_cache
+vectordb
